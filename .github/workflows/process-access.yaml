@@ -1,0 +1,110 @@
+name: Process Repository Access Request
+
+on:
+  issues:
+    types: [opened]
+
+jobs:
+  grant-access:
+    runs-on: ubuntu-latest
+    # Only run if issue title contains [ACCESS REQUEST]
+    if: contains(github.event.issue.title, '[ACCESS REQUEST]')
+    
+    steps:
+      - name: Extract User Data
+        id: extract
+        run: |
+          echo "Extracting data from issue body..."
+          BODY="${{ github.event.issue.body }}"
+          
+          # Extract GitHub username (everything after "GitHub Username: " until newline)
+          GITHUB_USER=$(echo "$BODY" | grep "GitHub Username:" | sed 's/GitHub Username: //' | tr -d '\r')
+          echo "github_user=$GITHUB_USER" >> $GITHUB_OUTPUT
+          
+          # Extract email
+          EMAIL=$(echo "$BODY" | grep "Email:" | sed 's/Email: //' | tr -d '\r')
+          echo "email=$EMAIL" >> $GITHUB_OUTPUT
+          
+          # Extract name
+          NAME=$(echo "$BODY" | grep "Name:" | sed 's/Name: //' | tr -d '\r')
+          echo "name=$NAME" >> $GITHUB_OUTPUT
+      
+      - name: Add Repository Collaborator
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.PAT_TOKEN }}
+          script: |
+            const githubUser = '${{ steps.extract.outputs.github_user }}';
+            const email = '${{ steps.extract.outputs.email }}';
+            const name = '${{ steps.extract.outputs.name }}';
+            
+            console.log(`Adding ${githubUser} as collaborator...`);
+            
+            try {
+              // Add user as collaborator with read access
+              await github.rest.repos.addCollaborator({
+                owner: 'Trammell-Whitfield',
+                repo: 'PCA_Dashboard',
+                username: githubUser,
+                permission: 'pull'  // read-only access
+              });
+              
+              // Comment on the issue with success
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                body: `✅ Success! @${githubUser} has been granted read access to the PCA_Dashboard repository.\n\n` +
+                      `They will receive a GitHub invitation at their registered email address.\n\n` +
+                      `**Next Steps:**\n` +
+                      `1. Check your GitHub notifications or email\n` +
+                      `2. Accept the repository invitation\n` +
+                      `3. Clone the repository: \`git clone https://github.com/Trammell-Whitfield/PCA_Dashboard.git\`\n\n` +
+                      `Welcome to the PCA Dashboard pre-release program! 🎉`
+              });
+              
+              // Add success label
+              await github.rest.issues.addLabels({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                labels: ['access-granted']
+              });
+              
+            } catch (error) {
+              console.error('Error:', error);
+              
+              // Comment with error
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                body: `❌ Error granting access to @${githubUser}\n\n` +
+                      `**Possible reasons:**\n` +
+                      `- Username may not exist\n` +
+                      `- User may already have access\n` +
+                      `- Repository permissions issue\n\n` +
+                      `Please verify the GitHub username and try again, or contact support.\n\n` +
+                      `Error details: ${error.message}`
+              });
+              
+              // Add error label
+              await github.rest.issues.addLabels({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                labels: ['error']
+              });
+            }
+      
+      - name: Close Issue
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            await github.rest.issues.update({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              state: 'closed'
+            });
