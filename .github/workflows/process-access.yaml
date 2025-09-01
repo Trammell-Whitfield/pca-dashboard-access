@@ -17,17 +17,19 @@ jobs:
           echo "Extracting data from issue body..."
           BODY="${{ github.event.issue.body }}"
           
-          # Extract GitHub username (everything after "GitHub Username: " until newline)
-          GITHUB_USER=$(echo "$BODY" | grep "GitHub Username:" | sed 's/GitHub Username: //' | tr -d '\r')
+          # Extract GitHub username (remove ** markdown and spaces)
+          GITHUB_USER=$(echo "$BODY" | grep "GitHub Username:" | sed 's/.*GitHub Username: *//' | sed 's/\*\*.*//' | tr -d ' ' | tr -d '\r')
           echo "github_user=$GITHUB_USER" >> $GITHUB_OUTPUT
           
           # Extract email
-          EMAIL=$(echo "$BODY" | grep "Email:" | sed 's/Email: //' | tr -d '\r')
+          EMAIL=$(echo "$BODY" | grep "Email:" | sed 's/.*Email: *//' | sed 's/\*\*.*//' | tr -d '\r')
           echo "email=$EMAIL" >> $GITHUB_OUTPUT
           
-          # Extract name
-          NAME=$(echo "$BODY" | grep "Name:" | sed 's/Name: //' | tr -d '\r')
+          # Extract name  
+          NAME=$(echo "$BODY" | grep "Name:" | sed 's/.*Name: *//' | sed 's/\*\*.*//' | tr -d '\r')
           echo "name=$NAME" >> $GITHUB_OUTPUT
+          
+          echo "Extracted - Name: $NAME, Email: $EMAIL, GitHub: $GITHUB_USER"
       
       - name: Add Repository Collaborator
         uses: actions/github-script@v7
@@ -38,7 +40,7 @@ jobs:
             const email = '${{ steps.extract.outputs.email }}';
             const name = '${{ steps.extract.outputs.name }}';
             
-            console.log(`Adding ${githubUser} as collaborator...`);
+            console.log(`Attempting to add ${githubUser} as collaborator to PCA_Dashboard...`);
             
             try {
               // Add user as collaborator with read access
@@ -49,18 +51,14 @@ jobs:
                 permission: 'pull'  // read-only access
               });
               
+              console.log('Successfully added collaborator!');
+              
               // Comment on the issue with success
               await github.rest.issues.createComment({
                 owner: context.repo.owner,
                 repo: context.repo.repo,
                 issue_number: context.issue.number,
-                body: `✅ Success! @${githubUser} has been granted read access to the PCA_Dashboard repository.\n\n` +
-                      `They will receive a GitHub invitation at their registered email address.\n\n` +
-                      `**Next Steps:**\n` +
-                      `1. Check your GitHub notifications or email\n` +
-                      `2. Accept the repository invitation\n` +
-                      `3. Clone the repository: \`git clone https://github.com/Trammell-Whitfield/PCA_Dashboard.git\`\n\n` +
-                      `Welcome to the PCA Dashboard pre-release program! 🎉`
+                body: `✅ **Access Granted!**\n\n@${githubUser} has been successfully added as a collaborator to the PCA_Dashboard repository.\n\n**Next Steps:**\n1. Check your email for the GitHub invitation\n2. Accept the repository invitation\n3. Clone the repository:\n\`\`\`bash\ngit clone https://github.com/Trammell-Whitfield/PCA_Dashboard.git\n\`\`\`\n\n**Access Level:** Read-only (pull)\n**Granted at:** ${new Date().toISOString()}\n\nWelcome to the PCA Dashboard pre-release program! 🎉`
               });
               
               // Add success label
@@ -72,20 +70,14 @@ jobs:
               });
               
             } catch (error) {
-              console.error('Error:', error);
+              console.error('Error adding collaborator:', error.message);
               
               // Comment with error
               await github.rest.issues.createComment({
                 owner: context.repo.owner,
                 repo: context.repo.repo,
                 issue_number: context.issue.number,
-                body: `❌ Error granting access to @${githubUser}\n\n` +
-                      `**Possible reasons:**\n` +
-                      `- Username may not exist\n` +
-                      `- User may already have access\n` +
-                      `- Repository permissions issue\n\n` +
-                      `Please verify the GitHub username and try again, or contact support.\n\n` +
-                      `Error details: ${error.message}`
+                body: `❌ **Error Granting Access**\n\nFailed to add @${githubUser} as a collaborator.\n\n**Possible reasons:**\n- The username may not exist on GitHub\n- The username may be misspelled\n- The user may already have access\n- There may be a permissions issue\n\n**Error details:** ${error.message}\n\n**Manual action required:** Please manually add this user or contact them for the correct username.`
               });
               
               // Add error label
@@ -93,52 +85,13 @@ jobs:
                 owner: context.repo.owner,
                 repo: context.repo.repo,
                 issue_number: context.issue.number,
-                labels: ['error']
+                labels: ['error', 'needs-manual-review']
               });
             }
-      - name: Send Welcome Email
-        uses: dawidd6/action-send-mail@v3
-        if: success()  # Only send email if user was successfully added
-        with:
-          server_address: smtp.gmail.com
-          server_port: 465
-          secure: true
-          username: ${{ secrets.GMAIL_ADDRESS }}
-          password: ${{ secrets.GMAIL_APP_PASSWORD }}
-          subject: Welcome to PCA Dashboard Pre-Release Program!
-          to: ${{ steps.extract.outputs.email }}
-          from: PCA Dashboard Team <${{ secrets.GMAIL_ADDRESS }}>
-          body: |
-            Hi ${{ steps.extract.outputs.name }}!
-            
-            Welcome to the PCA Dashboard pre-release program! 🎉
-            
-            You've been granted read-only access to our repository. Here's how to get started:
-            
-            ✅ STEP 1: Check your email for the GitHub invitation
-            ✅ STEP 2: Click "Accept invitation" in the GitHub email
-            ✅ STEP 3: Clone the repository using:
-               git clone https://github.com/Trammell-Whitfield/PCA_Dashboard.git
-            ✅ STEP 4: Follow the setup instructions in the README
-            
-            📋 Important Information:
-            • Repository: https://github.com/Trammell-Whitfield/PCA_Dashboard
-            • Your GitHub Username: ${{ steps.extract.outputs.github_user }}
-            • Access Level: Read-only (you can clone and use, but not push changes)
-            • Documentation: See README.md in the repository
-            
-            📧 Support:
-            If you have any questions or encounter issues, please open an issue in the repository.
-            
-            Thank you for participating in our pre-release program! We're excited to have you on board.
-            
-            Best regards,
-            The PCA Dashboard Team
-            
-            ---
-            This is an automated message. Please do not reply to this email.
+      
       - name: Close Issue
         uses: actions/github-script@v7
+        if: always()
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
