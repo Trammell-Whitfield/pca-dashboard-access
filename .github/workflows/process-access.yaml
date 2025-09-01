@@ -96,7 +96,47 @@ jobs:
                 labels: ['error']
               });
             }
-      
+      - name: Send Welcome Email
+        uses: dawidd6/action-send-mail@v3
+        if: success()  # Only send email if user was successfully added
+        with:
+          server_address: smtp.gmail.com
+          server_port: 465
+          secure: true
+          username: ${{ secrets.GMAIL_ADDRESS }}
+          password: ${{ secrets.GMAIL_APP_PASSWORD }}
+          subject: Welcome to PCA Dashboard Pre-Release Program!
+          to: ${{ steps.extract.outputs.email }}
+          from: PCA Dashboard Team <${{ secrets.GMAIL_ADDRESS }}>
+          body: |
+            Hi ${{ steps.extract.outputs.name }}!
+            
+            Welcome to the PCA Dashboard pre-release program! 🎉
+            
+            You've been granted read-only access to our repository. Here's how to get started:
+            
+            ✅ STEP 1: Check your email for the GitHub invitation
+            ✅ STEP 2: Click "Accept invitation" in the GitHub email
+            ✅ STEP 3: Clone the repository using:
+               git clone https://github.com/Trammell-Whitfield/PCA_Dashboard.git
+            ✅ STEP 4: Follow the setup instructions in the README
+            
+            📋 Important Information:
+            • Repository: https://github.com/Trammell-Whitfield/PCA_Dashboard
+            • Your GitHub Username: ${{ steps.extract.outputs.github_user }}
+            • Access Level: Read-only (you can clone and use, but not push changes)
+            • Documentation: See README.md in the repository
+            
+            📧 Support:
+            If you have any questions or encounter issues, please open an issue in the repository.
+            
+            Thank you for participating in our pre-release program! We're excited to have you on board.
+            
+            Best regards,
+            The PCA Dashboard Team
+            
+            ---
+            This is an automated message. Please do not reply to this email.
       - name: Close Issue
         uses: actions/github-script@v7
         with:
